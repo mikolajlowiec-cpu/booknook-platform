@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f5f0" />
+    <meta name="description" content="A cozy corner of the internet for books with more stories to tell." />
+    <title>BookNook — stories find new homes</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="BookNook home">
+        <span class="brand-mark" aria-hidden="true">b.</span>
+        <span>booknook</span>
+      </a>
+      <form class="search" id="search-form" role="search">
+        <span aria-hidden="true">⌕</span>
+        <input id="search" type="search" placeholder="Find your next favorite…" autocomplete="off" aria-label="Search books" />
+        <kbd>⌘ K</kbd>
+      </form>
+      <nav class="top-actions" aria-label="Account">
+        <button class="nav-link" id="orders-button" type="button">My orders</button>
+        <button class="nav-link" id="listings-button" type="button">My listings</button>
+        <button class="button button-dark button-small" id="account-button" type="button">Sign in</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="eyebrow-dot"></span> A marketplace for well-loved books</div>
+          <h1>Good books<br />deserve <em>another chapter.</em></h1>
+          <p>Find your next can’t-put-it-down, or pass a favorite along to someone new.</p>
+          <div class="hero-actions">
+            <a class="button button-dark" href="#books">Explore books <span aria-hidden="true">↗</span></a>
+            <button class="button button-light" id="hero-sell-button" type="button">List a book <span aria-hidden="true">＋</span></button>
+          </div>
+          <div class="hero-note"><span class="avatar-stack" aria-hidden="true"><i>M</i><i>J</i><i>A</i></span><span><strong>Good reads, good people.</strong><br />A little more thoughtful by design.</span></div>
+        </div>
+        <div class="hero-art" aria-label="Illustration of books waiting to be read">
+          <div class="sun-shape"></div>
+          <div class="plant plant-one">⌁</div>
+          <div class="book-stack">
+            <div class="book book-cream"><span>THE ART<br />OF SLOW<br />LIVING</span><small>MONA LEWIS</small></div>
+            <div class="book book-green"><span>WILD<br />PLACES</span><small>ROBERT MACFARLANE</small></div>
+            <div class="book book-rust"><span>THE<br />GOLDFINCH</span><small>DONNA TARTT</small></div>
+          </div>
+          <div class="plant plant-two">✳</div>
+          <div class="floating-note">read<br />again <span>↗</span></div>
+          <div class="art-caption">Pass it on. Keep the story going.</div>
+        </div>
+      </section>
+
+      <section class="community-strip" aria-label="Community values">
+        <span><b>✳</b> Books with a past, and a future</span>
+        <span><b>✳</b> Every shelf has a story</span>
+        <span><b>✳</b> Good things get passed around</span>
+      </section>
+
+      <section class="marketplace" id="books">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">THE COMMUNITY BOOKSHELF</div>
+            <h2 id="section-title">Fresh off the shelf</h2>
+          </div>
+          <button class="text-button" id="view-all-button" type="button">View all books <span aria-hidden="true">→</span></button>
+        </div>
+        <div class="category-row" id="categories" aria-label="Filter by category"></div>
+        <div class="book-grid" id="book-grid" aria-live="polite"></div>
+        <div class="empty-state hidden" id="empty-state">
+          <span>◎</span>
+          <h3>No books on this shelf just yet</h3>
+          <p>Try a different search, or be the first to add one.</p>
+          <button class="button button-dark" id="empty-sell-button" type="button">List a book</button>
+        </div>
+      </section>
+
+      <section class="sell-banner">
+        <div class="sell-illustration" aria-hidden="true"><span>↗</span><div class="mini-book"></div><div class="mini-book second"></div></div>
+        <div><div class="eyebrow">MAKE ROOM FOR A NEW STORY</div><h2>Someone’s looking<br />for that book.</h2><p>Give your old favorites a new home on BookNook.</p></div>
+        <button class="button button-dark" id="banner-sell-button" type="button">Sell a book <span aria-hidden="true">→</span></button>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <a class="brand" href="#"><span class="brand-mark">b.</span><span>booknook</span></a>
+      <span>A little corner for stories that keep going.</span>
+      <span>Made for readers, everywhere.</span>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <dialog class="modal" id="modal">
+      <button class="modal-close" id="modal-close" type="button" aria-label="Close dialog">×</button>
+      <div id="modal-content"></div>
+    </dialog>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: BookNook serverless book marketplace prototype.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 256
+
+Resources:
+  BookNookApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins:
+          - http://localhost:5500
+          - http://127.0.0.1:5500
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        MaxAge: 300
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${BookNookUserPool}"
+              Audience:
+                - !Ref BookNookWebClient
+        DefaultAuthorizer: CognitoAuthorizer
+
+  BookNookUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-members"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+
+  BookNookWebClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${AWS::StackName}-web"
+      UserPoolId: !Ref BookNookUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  BookListingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: bookId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+        - AttributeName: sellerId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: bookId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusCreatedAtIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: SellerCreatedAtIndex
+          KeySchema:
+            - AttributeName: sellerId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: orderId
+          AttributeType: S
+        - AttributeName: buyerId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: orderId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: BuyerCreatedAtIndex
+          KeySchema:
+            - AttributeName: buyerId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  BookNookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: app.handler
+      Environment:
+        Variables:
+          BOOKS_TABLE: !Ref BookListingsTable
+          ORDERS_TABLE: !Ref OrdersTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BookListingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:TransactWriteItems
+              Resource:
+                - !GetAtt BookListingsTable.Arn
+                - !GetAtt OrdersTable.Arn
+      Events:
+        BrowseBooks:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BookNookApi
+            Path: /books
+            Method: GET
+        CreateBook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BookNookApi
+            Path: /books
+            Method: POST
+        MyListings:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BookNookApi
+            Path: /me/listings
+            Method: GET
+        CheckoutBook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BookNookApi
+            Path: /books/{bookId}/checkout
+            Method: POST
+        MyOrders:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BookNookApi
+            Path: /me/orders
+            Method: GET
+
+Outputs:
+  ApiUrl:
+    Description: Base URL for the authenticated marketplace API.
+    Value: !Sub "https://${BookNookApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+  UserPoolId:
+    Description: Cognito user pool for member sign-in.
+    Value: !Ref BookNookUserPool
+  UserPoolClientId:
+    Description: Public Cognito app client ID for the browser.
+    Value: !Ref BookNookWebClient

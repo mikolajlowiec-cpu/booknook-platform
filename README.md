@@ -65,6 +65,6 @@ python3 -m unittest discover -s tests -v
 
 ## Threat-modeling entry point
 
-Start with [docs/architecture.md](docs/architecture.md) for the component diagram, trust boundaries, data flows, assets, abuse cases, and explicit prototype limitations. In particular, the initial design has no object-storage service; invoice storage can be introduced as a separate modeled change later.
+Start with [docs/architecture.md](docs/architecture.md) for the component diagram, trust boundaries, data flows, assets, abuse cases, and explicit prototype limitations. It also models a proposed Stripe test-mode trust boundary for threat-modeling exercises; this is documentation only, and the app does not integrate Stripe or process payments. The initial design has no object-storage service; invoice storage can be introduced as a separate modeled change later.
 
 This is a teaching prototype, not a production marketplace. Review the infrastructure, authentication, deployment, privacy, and operational controls before using it with real users.

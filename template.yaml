@@ -124,6 +124,42 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
 
+  InvoicesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
+  InvoicesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref InvoicesBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt InvoicesBucket.Arn
+              - !Sub "${InvoicesBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
   BookNookFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -133,6 +169,7 @@ Resources:
         Variables:
           BOOKS_TABLE: !Ref BookListingsTable
           ORDERS_TABLE: !Ref OrdersTable
+          INVOICES_BUCKET: !Ref InvoicesBucket
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BookListingsTable
@@ -145,6 +182,12 @@ Resources:
               Resource:
                 - !GetAtt BookListingsTable.Arn
                 - !GetAtt OrdersTable.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub "${InvoicesBucket.Arn}/invoices/*"
       Events:
         BrowseBooks:
           Type: HttpApi
@@ -187,3 +230,6 @@ Outputs:
   UserPoolClientId:
     Description: Public Cognito app client ID for the browser.
     Value: !Ref BookNookWebClient
+  InvoicesBucketName:
+    Description: Private S3 bucket for order invoice objects.
+    Value: !Ref InvoicesBucket

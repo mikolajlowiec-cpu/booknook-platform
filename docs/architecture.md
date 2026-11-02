@@ -15,6 +15,7 @@ flowchart LR
     lambda["AWS Lambda<br/>BookNook API"]
     books[("Amazon DynamoDB<br/>BookListings")]
     orders[("Amazon DynamoDB<br/>Orders")]
+    invoices[("Amazon S3<br/>Invoices bucket<br/>private, encrypted, versioned")]
     secrets["AWS Secrets Manager<br/>Stripe test-mode API key<br/>and webhook secret"]
   end
   subgraph thirdparty["Third-party services"]
@@ -26,13 +27,14 @@ flowchart LR
   api -->|"Verified JWT claims"| lambda
   lambda -->|"Scoped table permissions"| books
   lambda -->|"Scoped table permissions"| orders
+  lambda -->|"Scoped read/write: invoices/*"| invoices
   lambda -.->|"Proposed: create Checkout Session<br/>using server-side listing price"| stripe
   lambda -.->|"Proposed: retrieve test-mode secrets"| secrets
   reader -.->|"Proposed: redirect to Stripe-hosted Checkout<br/>and return to the storefront"| stripe
   stripe -.->|"Proposed: signed payment webhook<br/>to a dedicated unauthenticated route"| api
 ```
 
-Solid lines show the implemented prototype. Dashed lines show the proposed Stripe test-mode extension only. The browser is served locally for this prototype. `web/config.js` points it at the deployed API and Cognito pool when configured. There is intentionally no object-storage bucket in this architecture.
+Solid lines show implemented components and infrastructure permissions; dashed lines show the proposed Stripe test-mode extension. The Lambda has scoped S3 access for invoice objects, but invoice generation, upload, download, and API routes are not implemented. The browser is served locally for this prototype. `web/config.js` points it at the deployed API and Cognito pool when configured.
 
 ## Trust boundaries and data
 
@@ -42,10 +44,11 @@ Solid lines show the implemented prototype. Dashed lines show the proposed Strip
 | Reader device → API Gateway | Listing and order requests, Cognito ID token | HTTPS; API Gateway validates issuer and audience on every route |
 | API Gateway → Lambda | Request body, route parameters, verified JWT claims | Lambda takes member ID from the verified `sub` claim, not from caller input |
 | Lambda → DynamoDB | Listings and demo-order records | Function role limited to the two application tables; transactional checkout |
+| Lambda → S3 invoice bucket | Invoice objects under the `invoices/` prefix | Lambda role can read/write only that prefix; S3 blocks public access, enforces TLS, encrypts objects at rest, and versions objects |
 | BookNook backend → Stripe (proposed) | Checkout Session request with server-selected amount, currency, and opaque order reference; signed webhook events back to BookNook | Stripe test mode; keep API and webhook secrets server-side; verify webhook signatures; treat browser redirects as untrusted |
 | Reader device ↔ Stripe (proposed) | Redirect to hosted Checkout and return URL; card details are entered directly on Stripe | HTTPS; do not collect or store card details in BookNook; a browser return is not proof of payment |
 
-Sensitive or important data: member identifiers and email addresses, listing descriptions, prices, order history, and authentication tokens in the browser session. The implemented API does not store passwords or payment-card data. The proposed integration adds Stripe API and webhook secrets, and payment identifiers/statuses; secrets must not be sent to the browser or written to logs.
+Sensitive or important data: member identifiers and email addresses, listing descriptions, prices, order history, invoice files, and authentication tokens in the browser session. The implemented API does not store passwords or payment-card data. Invoice storage is provisioned, but the application does not currently create or serve invoices. The proposed Stripe integration adds API and webhook secrets, and payment identifiers/statuses; secrets must not be sent to the browser or written to logs.
 
 ## Core flows
 
@@ -71,9 +74,9 @@ Sensitive or important data: member identifiers and email addresses, listing des
 ## Deliberate prototype limits
 
 - Checkout records a `PLACED` order only. It does not integrate a payment processor, handle refunds, provide shipping, or issue receipts/invoices.
+- The private, encrypted, versioned S3 invoice bucket is provisioned and the API Lambda receives its bucket name plus read/write permission limited to the `invoices/` prefix. Invoice objects are not currently generated, uploaded, or served; no invoice API route exists.
 - The Stripe boundary and payment flow in this document are a test-mode design for threat modeling only; there is no Stripe SDK, credential, API route, or live payment integration in the app.
 - A future webhook endpoint must be exempted from the API's default Cognito JWT authorizer and instead authenticate events using Stripe signature verification. Do not disable authorization on existing member routes.
 - The browser's demo mode uses local storage and simulated sign-in. It is for UI exploration only and is not an authentication or persistence control.
 - The browser assets are served locally in this sample; production hosting, custom domain, TLS configuration, and content security policy need a deliberate deployment design.
 - Rate limiting, moderation, audit logging, alarms, and operational response procedures are not configured.
-- No S3 bucket or other invoice storage is part of the initial design.

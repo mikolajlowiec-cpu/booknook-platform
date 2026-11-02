@@ -6,11 +6,11 @@ BookNook is a cozy book marketplace prototype: readers can browse books, list a 
 
 - Responsive browser storefront with search, category filters, sample listings, account screens, and sell/buy flows.
 - Local demo mode that works without AWS; it keeps demo listings and orders in browser local storage.
-- AWS serverless API built with AWS SAM: API Gateway HTTP API, Cognito User Pool, Lambda, and two DynamoDB tables.
+- AWS serverless API built with AWS SAM: API Gateway HTTP API, Cognito User Pool, Lambda, two DynamoDB tables, and a private S3 bucket provisioned for invoices.
 - Member-scoped seller listings and orders, validated listing input, and atomic checkout to stop duplicate sales.
 - [Architecture and threat-modeling notes](docs/architecture.md).
 
-**No S3 bucket is included.** The checkout is a prototype: it records a demo order but does not process real payments, arrange delivery, or create invoices. Do not enter real payment or sensitive personal information.
+The checkout is a prototype: it records a demo order but does not process real payments, arrange delivery, or create invoices. The S3 invoice bucket is provisioned and connected to the API Lambda with access limited to its `invoices/` prefix, but the application does not yet generate, upload, or serve invoice files. Do not enter real payment or sensitive personal information.
 
 ## Run the website locally
 
@@ -31,7 +31,7 @@ sam build
 sam deploy --guided
 ```
 
-The deployment outputs `ApiUrl`, `UserPoolId`, and `UserPoolClientId`. Set those values in `web/config.js`:
+The deployment outputs `ApiUrl`, `UserPoolId`, `UserPoolClientId`, and `InvoicesBucketName`. Set the API and Cognito values in `web/config.js`:
 
 ```js
 window.BOOKNOOK_CONFIG = {
@@ -65,6 +65,6 @@ python3 -m unittest discover -s tests -v
 
 ## Threat-modeling entry point
 
-Start with [docs/architecture.md](docs/architecture.md) for the component diagram, trust boundaries, data flows, assets, abuse cases, and explicit prototype limitations. It also models a proposed Stripe test-mode trust boundary for threat-modeling exercises; this is documentation only, and the app does not integrate Stripe or process payments. The initial design has no object-storage service; invoice storage can be introduced as a separate modeled change later.
+Start with [docs/architecture.md](docs/architecture.md) for the component diagram, trust boundaries, data flows, assets, abuse cases, and explicit prototype limitations. It also models a proposed Stripe test-mode trust boundary for threat-modeling exercises; this is documentation only, and the app does not integrate Stripe or process payments.
 
 This is a teaching prototype, not a production marketplace. Review the infrastructure, authentication, deployment, privacy, and operational controls before using it with real users.

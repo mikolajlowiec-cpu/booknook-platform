@@ -65,6 +65,6 @@ python3 -m unittest discover -s tests -v
 
 ## Threat-modeling entry point
 
-Start with [docs/architecture.md](docs/architecture.md) for the component diagram, trust boundaries, data flows, assets, abuse cases, and explicit prototype limitations. It also models a proposed Stripe test-mode trust boundary for threat-modeling exercises; this is documentation only, and the app does not integrate Stripe or process payments.
+Start with the [threat-modeling context](docs/threat-modeling/README.md) and its [system description](docs/threat-modeling/system-description.md) when using an AI threat-modeling tool. The [architecture notes](docs/architecture.md) include a component diagram, trust boundaries, data flows, assets, abuse cases, and explicit prototype limitations. They also model a proposed Stripe test-mode trust boundary for threat-modeling exercises; this is documentation only, and the app does not integrate Stripe or process payments.
 
 This is a teaching prototype, not a production marketplace. Review the infrastructure, authentication, deployment, privacy, and operational controls before using it with real users.

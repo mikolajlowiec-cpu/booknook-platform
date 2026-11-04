@@ -1,5 +1,7 @@
 # BookNook architecture and threat-modeling notes
 
+For an AI-assisted threat-modeling run, begin with the [threat-modeling context](threat-modeling/README.md) and [system description](threat-modeling/system-description.md), then verify the claims against code and infrastructure.
+
 ## System overview
 
 BookNook is a small book marketplace prototype. Members browse listings, post books for sale, and place a demo order. The implemented checkout records an order and marks a listing sold atomically; it does **not** take payment, calculate shipping, or issue invoices. The Stripe flow below is a proposed test-mode extension for threat-modeling exercises and is not implemented.

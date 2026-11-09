@@ -10,7 +10,7 @@ BookNook is a cozy book marketplace prototype: readers can browse books, list a 
 - Member-scoped seller listings and orders, validated listing input, and atomic checkout to stop duplicate sales.
 - [Architecture and threat-modeling notes](docs/architecture.md).
 
-The checkout is a prototype: it records a demo order but does not process real payments, arrange delivery, or create invoices. The S3 invoice bucket is provisioned and connected to the API Lambda with access limited to its `invoices/` prefix, but the application does not yet generate, upload, or serve invoice files. Do not enter real payment or sensitive personal information.
+The checkout is a prototype: it records a demo order but does not process real payments, arrange delivery, or issue tax/payment invoices. In AWS mode, a DynamoDB Stream invokes a separate Lambda to write a minimal JSON order receipt to the private S3 bucket. The receipt is not a tax invoice, and no receipt retrieval route is provided. Do not enter real payment or sensitive personal information.
 
 ## Run the website locally
 

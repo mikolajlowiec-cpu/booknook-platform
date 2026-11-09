@@ -4,7 +4,7 @@
 
 BookNook is a prototype marketplace for browsing used-book listings, creating listings, and placing demo orders. It has a static browser storefront, an optional AWS-backed API, and a browser-only demo mode.
 
-The deployed application does not take payments, arrange shipping, issue invoices, or integrate with Stripe. The AWS template provisions an S3 bucket intended for future invoices and grants the API Lambda limited object access, but the application code does not currently use the bucket. Stripe is a proposed test-mode scenario described in [the architecture notes](../architecture.md), not a runtime dependency.
+The deployed application does not take payments, arrange shipping, issue tax/payment invoices, or integrate with Stripe. In AWS mode, order inserts emit DynamoDB Stream records; a dedicated Lambda writes a minimal JSON order receipt to the private S3 bucket. Receipts omit buyer/seller IDs and have no user-facing retrieval route. Stripe is a proposed test-mode scenario described in [the architecture notes](../architecture.md), not a runtime dependency.
 
 The system is intended for demonstration and threat-modeling exercises, not for handling real payment or sensitive personal information.
 
@@ -27,8 +27,10 @@ When configured with API and Cognito values, the browser calls the AWS API. The 
 - Amazon API Gateway HTTP API with a Cognito JWT authorizer as the default authorizer.
 - Amazon Cognito User Pool and public browser app client (no client secret).
 - One Python 3.12 Lambda function for the API.
+- A second Python 3.12 Lambda function triggered by new Orders table stream records to create JSON order receipts.
 - DynamoDB tables for listings and orders.
-- A private S3 bucket reserved for invoice objects.
+- A DynamoDB Stream on the Orders table with `NEW_IMAGE` records.
+- A private S3 bucket for generated order receipt objects.
 
 The browser signs up and signs in directly against Cognito. It stores the Cognito ID token and member claims in `sessionStorage`, and sends the ID token as a bearer token on API calls. The browser decodes token claims for display/state; API Gateway validates the JWT against the configured issuer and audience. The Lambda also reads the authenticated `sub` claim from the API Gateway authorizer context and rejects requests where it is missing.
 
@@ -45,7 +47,9 @@ The SAM template allows CORS origins `http://localhost:5500` and `http://127.0.0
 | BookNook Lambda | Validates listing input, derives member identity from verified claims, queries DynamoDB, and performs checkout transaction. `src/app.py`, `template.yaml`. |
 | BookListings DynamoDB table | Stores book listing data, including seller ID, title, author, condition, description, category, price, status, and timestamps. `template.yaml`, `src/app.py`. |
 | Orders DynamoDB table | Stores order ID, buyer and seller IDs, book ID, title, price, status, and creation time. `template.yaml`, `src/app.py`. |
-| Invoices S3 bucket | Private bucket with public access blocked, AES-256 server-side encryption, versioning, and a bucket policy denying insecure transport. Lambda environment receives its name and its role has `GetObject`/`PutObject` on `invoices/*`. No application code generates, reads, or writes invoice files. `template.yaml`. |
+| Orders DynamoDB Stream | Emits new order records with `NEW_IMAGE` for asynchronous processing. `template.yaml`. |
+| OrderReceiptFunction | Processes order INSERT stream records and writes a minimal JSON order receipt to `invoices/{orderId}.json`. Retries overwrite the current deterministic key; S3 versioning may retain additional object versions. `src/order_receipt_worker.py`, `template.yaml`. |
+| Receipts S3 bucket | Private bucket with public access blocked, AES-256 server-side encryption, versioning, and a bucket policy denying insecure transport. Receipt Lambda has `PutObject` only on `invoices/*`; no download path is implemented. `template.yaml`. |
 | Stripe | No runtime component. A future test-mode flow is shown as proposed in `docs/architecture.md` only. |
 
 ## API surface and authorization
@@ -60,7 +64,7 @@ All five routes are connected to the same Lambda and inherit the HTTP API's defa
 | `POST /books/{bookId}/checkout` | Loads a listed book and transactionally marks it sold and creates an order. Rejects unavailable listings and self-purchase. |
 | `GET /me/orders` | Queries orders using the authenticated member's buyer ID. |
 
-The API implementation and route behavior are in `src/app.py`; route, authorizer, and table definitions are in `template.yaml`. The function role has CRUD access to the two DynamoDB tables, transaction-write access to those tables, and S3 object read/write access scoped to the invoice prefix. It has no S3 delete permission in the template.
+The API implementation and route behavior are in `src/app.py`; route, authorizer, and table definitions are in `template.yaml`. The API function role has CRUD access to the two DynamoDB tables and transaction-write access to those tables. The separate receipt function can read the Orders table stream and has S3 `PutObject` access scoped to the `invoices/*` prefix. It cannot read or delete S3 objects through the permissions defined here.
 
 ## Main data flows
 
@@ -69,7 +73,7 @@ The API implementation and route behavior are in `src/app.py`; route, authorizer
 3. **Create listing:** browser sends listing fields and ID token → API Gateway → Lambda validates fields and sets seller ID from verified claims → listings table.
 4. **Checkout:** browser requests checkout with ID token → Lambda reads listing → DynamoDB transaction changes listing status and inserts an order → response returns order metadata to browser.
 5. **Account views:** browser requests own listings or orders with ID token → Lambda scopes the DynamoDB query to the member ID from verified claims → browser.
-6. **Invoice storage (future use):** the bucket and constrained Lambda permissions exist, but no current application data flow reaches S3.
+6. **Order receipt generation:** a successful order transaction inserts an order; DynamoDB Streams delivers its new image to a separate Lambda, which writes a minimal JSON receipt to S3. This is asynchronous and at-least-once. Retries overwrite the current object but may add S3 object versions; there is no receipt retrieval endpoint.
 7. **Payment (future exercise):** a test-mode Stripe flow is proposed in `docs/architecture.md`; there is no Stripe API, webhook endpoint, credential, or payment status in the current implementation.
 
 ## Data to consider
@@ -81,7 +85,7 @@ The API implementation and route behavior are in `src/app.py`; route, authorizer
 | Listing details | Browser and BookListings table in AWS mode; local storage in demo mode. Includes user-provided text and price. | Integrity, unauthorized modification, content handling, data exposure. |
 | Member identifiers | Cognito subject in AWS mode; simulated string in demo mode; used as seller/buyer keys. | Authorization and cross-member data isolation. |
 | Order data | Orders table in AWS mode; local storage in demo mode. Current order status is `PLACED`. | Transaction integrity, privacy, duplicate/incorrect order concerns. |
-| Invoice objects | Not generated or stored by the running application. S3 bucket exists for future use. | Future confidentiality, authorization, retention, and access-path requirements. |
+| Order receipt objects | Minimal JSON receipt in S3 in AWS mode; includes order and book identifiers/title, price, status, and timestamp, but omits buyer/seller IDs. | Confidentiality, object-key integrity, retention/versioning, retries, and lack of a current retrieval path. |
 | Payment data | Not collected or processed by BookNook. | Stripe/card-data threats apply only if the proposed payment extension is implemented. |
 
 ## Trust boundaries
@@ -91,9 +95,10 @@ The API implementation and route behavior are in `src/app.py`; route, authorizer
 3. **Browser ↔ API Gateway:** requests and bearer token cross a network boundary; HTTP API JWT authorizer validates the token.
 4. **API Gateway ↔ Lambda:** Lambda receives route/request data and authorizer claims; application code uses the verified `sub` claim as member identity.
 5. **Lambda ↔ DynamoDB:** backend reads/writes marketplace records under its IAM role; checkout uses a DynamoDB transaction.
-6. **Lambda ↔ S3:** provisioned role allows only `GetObject` and `PutObject` below `invoices/*`; there is currently no application call or user-facing route for this boundary.
-7. **BookNook ↔ Stripe:** not present in the implementation. The architecture document's dashed boundary is a proposed test-only flow and must not be interpreted as deployed.
-8. **Operator/deployment ↔ AWS account:** SAM deployment and AWS credentials are required to provision resources. This repository does not define a CI/CD workflow or operator access process.
+6. **Orders table ↔ DynamoDB Streams ↔ receipt Lambda:** stream records contain the full new order image, including buyer and seller IDs, crossing into a separate Lambda execution context.
+7. **Receipt Lambda ↔ S3:** worker writes minimized receipt content to a private object prefix using a deterministic order-based key.
+8. **BookNook ↔ Stripe:** not present in the implementation. The architecture document's dashed boundary is a proposed test-only flow and must not be interpreted as deployed.
+9. **Operator/deployment ↔ AWS account:** SAM deployment and AWS credentials are required to provision resources. This repository does not define a CI/CD workflow or operator access process.
 
 ## Security-relevant implementation facts
 
@@ -101,8 +106,8 @@ The API implementation and route behavior are in `src/app.py`; route, authorizer
 - The API derives seller and buyer identity from authorizer claims rather than caller-supplied member IDs.
 - Checkout uses a conditional DynamoDB transaction to prevent a sold/unavailable listing or self-purchase from becoming a successful order.
 - Browser demo authentication and local storage are convenience behavior only; they are not security controls.
-- The app has no payment processing, invoice generation/retrieval, delivery, rate limiting, moderation, audit pipeline, monitoring configuration, or production hosting definition evidenced here.
-- S3 public-access blocking, default encryption, versioning, and TLS enforcement are configured in the SAM template. These settings do not mean invoice data is currently being written.
+- The app has no payment processing, tax/payment invoice generation, receipt retrieval, delivery, rate limiting, moderation, audit pipeline, monitoring configuration, or production hosting definition evidenced here.
+- S3 public-access blocking, default encryption, versioning, and TLS enforcement are configured in the SAM template. The receipt generator writes JSON order summaries, not formal invoices.
 
 ## Threat-modeling prompts and open questions
 
@@ -115,6 +120,6 @@ Inspect the implementation and assess, with evidence:
 - Exposure of public listings and orders through indexes/responses, and whether API responses contain more data than the UI requires.
 - Availability and cost risks from API requests, account creation, and DynamoDB/S3 usage.
 - AWS IAM scope and deployment configuration, including lifecycle/retention, access logging, and recovery needs for future invoice objects.
-- The trust implications of introducing invoice generation or Stripe later; treat each as a design change requiring re-analysis, not as an existing flow.
+- The trust implications of extending receipts into formal invoices or introducing Stripe payments; treat each as a design change requiring re-analysis, not as an existing flow.
 
 Do not assume a threat is mitigated just because this document lists an intended control. Confirm the control in source or infrastructure. Record unresolved deployment/environment questions separately from code findings.

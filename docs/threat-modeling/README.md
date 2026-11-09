@@ -7,7 +7,7 @@ Use this folder as the starting point for an AI-assisted threat-modeling tool. T
 1. Read [system-description.md](system-description.md) for the application purpose, deployment modes, components, data, flows, trust boundaries, and known limitations.
 2. Inspect the referenced source files and `template.yaml` to confirm each statement against the current implementation.
 3. Model the local browser demo and the AWS-backed deployment separately. Do not combine their authentication, persistence, or network assumptions.
-4. Treat Stripe, payment processing, and invoice generation as **not implemented**. The Stripe flow in `docs/architecture.md` is a proposed exercise only; the S3 invoice bucket is provisioned but unused by application code.
+4. Treat Stripe and payment processing as **not implemented**. The Stripe flow in `docs/architecture.md` is a proposed exercise only. The AWS-backed app does generate minimal JSON order receipts through DynamoDB Streams and a dedicated Lambda; these are not tax/payment invoices and are not available through a user-facing download route.
 5. Identify threats and mitigations from the evidence. Label assumptions and open questions separately from verified repository facts. Do not present candidate risks as confirmed vulnerabilities without evidence.
 
 ## Expected model coverage
@@ -15,8 +15,8 @@ Use this folder as the starting point for an AI-assisted threat-modeling tool. T
 Consider:
 
 - Actors and trust zones, including readers, sellers, browsers, AWS services, and deployment operators.
-- Sensitive data and security-relevant operations, including authentication tokens, member identifiers, listings, prices, orders, and future invoice data.
-- Data-flow threats across the browser, Cognito, API Gateway, Lambda, DynamoDB, and S3 boundaries.
+- Sensitive data and security-relevant operations, including authentication tokens, member identifiers, listings, prices, orders, and receipt objects.
+- Data-flow threats across the browser, Cognito, API Gateway, Lambda, DynamoDB, DynamoDB Streams, and S3 boundaries.
 - Authentication and authorization, input validation, marketplace integrity, concurrency, data exposure, availability/cost, operational access, and third-party/service dependencies.
 - Controls that are implemented, controls that are only documented as intended, and areas with no control evidenced in the repository.
 

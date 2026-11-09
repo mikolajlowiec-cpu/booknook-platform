@@ -102,6 +102,8 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
       AttributeDefinitions:
         - AttributeName: orderId
           AttributeType: S
@@ -169,7 +171,6 @@ Resources:
         Variables:
           BOOKS_TABLE: !Ref BookListingsTable
           ORDERS_TABLE: !Ref OrdersTable
-          INVOICES_BUCKET: !Ref InvoicesBucket
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BookListingsTable
@@ -182,12 +183,6 @@ Resources:
               Resource:
                 - !GetAtt BookListingsTable.Arn
                 - !GetAtt OrdersTable.Arn
-        - Statement:
-            - Effect: Allow
-              Action:
-                - s3:GetObject
-                - s3:PutObject
-              Resource: !Sub "${InvoicesBucket.Arn}/invoices/*"
       Events:
         BrowseBooks:
           Type: HttpApi
@@ -220,6 +215,36 @@ Resources:
             Path: /me/orders
             Method: GET
 
+  OrderReceiptFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: order_receipt_worker.handler
+      Environment:
+        Variables:
+          INVOICES_BUCKET: !Ref InvoicesBucket
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DescribeStream
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:ListStreams
+              Resource: !GetAtt OrdersTable.StreamArn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub "${InvoicesBucket.Arn}/invoices/*"
+      Events:
+        NewOrders:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt OrdersTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+
 Outputs:
   ApiUrl:
     Description: Base URL for the authenticated marketplace API.
@@ -231,5 +256,5 @@ Outputs:
     Description: Public Cognito app client ID for the browser.
     Value: !Ref BookNookWebClient
   InvoicesBucketName:
-    Description: Private S3 bucket for order invoice objects.
+    Description: Private S3 bucket for generated order receipt objects.
     Value: !Ref InvoicesBucket
